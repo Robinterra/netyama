@@ -1,0 +1,135 @@
+namespace "System.Net"
+{
+    using "System.IO";
+    using "System.Runtime";
+
+    public class HttpServer
+    {
+        #region vars
+
+        private Socket socket;
+        private string host;
+        private int port;
+        private ThreadPool threadpool;
+        private Func<bool, Any> onrequest;
+
+        #endregion vars
+
+        #region get/set
+
+        #endregion get/set
+
+        #region ctor
+
+        public this new()
+        {
+            this.threadpool = new ThreadPool();
+            return this;
+        }
+
+        public this ~()
+        {
+
+        }
+
+        #endregion ctor
+
+        #region methods
+
+        public bool Init(string host, int port)
+        {
+            this.host = host;
+            this.port = port;
+
+            Socket socket = new Socket();
+            if (!socket.Init((int)SocketDomain.InterNetwork, (int)SocketType.Stream)) return false;
+
+            if (!socket.Bind(host, port)) return false;
+
+            if (!socket.Listen(10)) return false;
+
+            this.socket = socket;
+
+            return true;
+        }
+
+        public bool Run()
+        {
+            Socket server = this.socket;
+            if (server is null) return false;
+
+            while (true)
+            {
+                Socket client = server.Accept();
+                if (client is null) continue;
+
+                ThreadPool threadpool = this.threadpool;
+                if (threadpool is null) continue;
+
+                Func<int, Any> handle = this.HandleRequest;
+                threadpool.StartNewThread(client, handle);
+            }
+
+            return true;
+        }
+
+        public bool HandleRequest(Socket client)
+        {
+            if (this.onrequest == null) return false;
+
+            Func<bool, Any> onrequest = this.onrequest;
+
+            onrequest(client);
+
+            return true;
+        }
+
+        #endregion methods
+    }
+
+    public struct HttpContext
+    {
+        public this ~()
+        {
+
+        }
+    }
+
+    public struct HttpRequest
+    {
+        public this ~()
+        {
+
+        }
+    }
+
+    public struct HttpResponse
+    {
+        public this ~()
+        {
+
+        }
+    }
+
+    public struct HttpHeader
+    {
+        public this ~()
+        {
+
+        }
+    }
+
+    public enum HttpMethod
+    {
+        None = 0,
+        Get = 1,
+        Post = 2,
+        Put = 3,
+        Delete = 4,
+        Head = 5,
+        Options = 6,
+        Trace = 7,
+        Connect = 8,
+        Patch = 9,
+    }
+}

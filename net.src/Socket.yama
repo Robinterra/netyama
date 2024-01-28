@@ -1,0 +1,198 @@
+namespace "System.Net"
+{
+    using "System.IO";
+    using "System.Runtime";
+
+    public class Socket
+    {
+
+        #region vars
+
+        private int socketid;
+
+        #endregion vars
+
+        #region get/set
+
+        #endregion get/set
+
+        #region ctor
+
+        public this new()
+        {
+            return this;
+        }
+
+        public this ~()
+        {
+            this.Close();
+        }
+
+        #endregion ctor
+
+        #region methods
+
+        public bool Init(int domain, int type)
+        {
+            this.socketid = InputOutput.CreateSocket(domain, type, 0);
+
+            return this.socketid > 0;
+        }
+
+        /*public bool Connect(string host, int port)
+        {
+            if (this.socketid <= 0) return false;
+
+            SocketAdress adress = SocketAdress.Create((int)SocketDomain.InterNetwork, port);
+            adress.Address = Socket.ParseIp(host);
+
+            int result = InputOutput.Connect(this.socketid, adress);
+
+            return result == 0;
+        }*/
+
+        public bool Bind(string host, int port)
+        {
+            if (this.socketid <= 0) return false;
+
+            SocketAdress adress = SocketAdress.Create((int)SocketDomain.InterNetwork, port);
+            adress.Address = Socket.ParseIp(host);
+
+            int result = InputOutput.Bind(this.socketid, adress, 16);
+
+            return result == 0;
+        }
+
+        public bool Listen(int backlog)
+        {
+            if (this.socketid <= 0) return false;
+
+            int result = InputOutput.Listen(this.socketid, backlog);
+
+            return result == 0;
+        }
+
+        public Socket? Accept()
+        {
+            if (this.socketid <= 0) return null;
+
+            int result = InputOutput.Accept(this.socketid);
+
+            if (result <= 0) return null;
+
+            Socket socket = new Socket();
+            socket.socketid = result;
+
+            return socket;
+        }
+
+        public int Send(ByteArray buffer)
+        {
+            if (this.socketid <= 0) return 0-1;
+
+            int result = InputOutput.Send(this.socketid, buffer, buffer.Size, 0);
+
+            return result;
+        }
+
+        public int Receive(ByteArray buffer)
+        {
+            if (this.socketid <= 0) return 0-1;
+
+            int result = InputOutput.Receive(this.socketid, buffer, buffer.Size);
+
+            return result;
+        }
+
+        public bool Close()
+        {
+            if (this.socketid <= 0) return false;
+
+            InputOutput.Close(this.socketid);
+
+            this.socketid = 0;
+
+            return true;
+        }
+
+        public static int ParseIp(string ip)
+        {
+            int result = 0;
+
+            RefString refString = RefString.Pack(ip);
+            let RefString number;
+            let IntParseResult parseResult;
+
+            for (int i = 0; i < 4; i = i + 1)
+            {
+                int current = refString.Data[i];
+                number = refString.Substring(i * 3, 2);
+
+                parseResult = int.Parse(number);
+                if (!parseResult.IsSuccess) return 0-1;
+
+                int tmp = parseResult.Result;
+                tmp = tmp << (i * 8);
+                result = result + tmp;
+            }
+
+            return result;
+        }
+
+        #endregion methods
+
+    }
+
+    public struct SocketAdress
+    {
+        public int FamilyAndPort;
+        public int Address;
+        public int Zero1;
+        public int Zero2;
+
+        public this ~()
+        {
+
+        }
+
+        public static SocketAdress Create(int family, int port)
+        {
+            int htonPort = SocketAdress.Htons(port);
+            Result.FamilyAndPort = (htonPort << 16) | (family & 0xFFFF);
+            Result.Address = 0;
+            Result.Zero1 = 0;
+            Result.Zero2 = 0;
+
+            return Result;
+        }
+
+        private static int Htons(int hostshort)
+        {
+            int result = (hostshort & 0xFF) << 8;
+            int tmp = hostshort >> 8;
+            tmp = tmp & 0xFF;
+            result = result | tmp;
+
+            return result;
+        }
+    }
+
+    public enum SocketType
+    {
+        Stream_TCP = 1,
+        Dgram_UDP = 2,
+        Raw = 3,
+        Rdm = 4,
+        Seqpacket = 5,
+    }
+
+    public enum SocketDomain
+    {
+        InterNetwork = 2,
+        InterNetworkV6 = 23,
+        Unix = 1,
+        AppleTalk = 16,
+        NetBios = 17,
+        Irda = 26,
+    }
+}
