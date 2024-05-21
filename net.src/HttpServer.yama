@@ -1,8 +1,10 @@
 namespace "System.Net"
 {
     using "System.IO";
+    using "System.Text";
     using "System.Runtime";
     using "System.Runtime.IO";
+    using "System.Reflection";
 
     #region Server
 
@@ -121,7 +123,7 @@ namespace "System.Net"
                 &RequestHandler handler = handlers.Get(i);
                 if (handler is null) continue;
 
-                bool sucess = handler.Execute(context);
+                bool sucess = handler.Execute(context.Request, context.Response);
                 if (sucess) return true;
             }
 
@@ -161,18 +163,8 @@ namespace "System.Net"
 
         public static bool HandleResponse(&Socket client, HttpResponse response)
         {
-            &Stream body = response.Body;
-            if (body is null)
-            {
-                ByteArray sendData = "HTTP/1.1 204 Not content\r\n\r\n" as ByteArray;
+            response.Send(client);
 
-                client.Send(sendData);
-                return true;
-            }
-
-            ByteArray defaultResp = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 11\r\n\r\nThere is Body" as ByteArray;
-
-            client.Send(defaultResp);
             return true;
         }
 
@@ -215,12 +207,109 @@ namespace "System.Net"
         {
 
         }
+
+        public bool Send(&Socket client)
+        {
+            &MemoryStream body = this.Body as MemoryStream;
+            int length = 0;
+            let RefString data;
+            if (body isnot null)
+            {
+                data = body.ToRefString();
+                length = data.Length;
+            }
+
+            this.Header.Send(client, length);
+
+            if (body isnot null)
+            {
+                client.Send(data.Source as ByteArray);
+            }
+
+            return true;
+        }
+
+        public static HttpResponse Ok()
+        {
+            Result.Header.SetStatus(200);
+            Result.Body = null as Stream;
+
+            return Result;
+        }
+
+        public static HttpResponse Ok(&object data, TypeInfo type)
+        {
+            MemoryStream stream = new MemoryStream();
+            JsonSerializer.Serialize(stream, data, type);
+            
+            Result.Header.SetStatus(200);
+            Result.Header.SetContentType("application/json");
+            Result.Body = stream;
+
+            return Result;
+        }
+
+        public static HttpResponse InternalServerError()
+        {
+            Result.Header.SetStatus(500);
+            Result.Body = null as Stream;
+
+            return Result;
+        }
     }
 
     public struct HttpResponseHeader
     {
         public int StatusCode;
         public string ContentType;
+
+        public bool SetContentType(string type)
+        {
+            this.ContentType = type;
+            return true;
+        }
+
+        public bool SendStatusCode(&Socket client)
+        {
+            client.Send("HTTP/1.1 " as ByteArray);
+
+            if (this.StatusCode == 200)
+            {
+                client.Send("200 OK" as ByteArray);
+            }
+            if (this.StatusCode == 404)
+            {
+                client.Send("404 Not Found" as ByteArray);
+            }
+            if (this.StatusCode == 500)
+            {
+                client.Send("500 Internal Server Error" as ByteArray);
+            }
+
+            client.Send("\r\n" as ByteArray);
+
+            return true;
+        }
+
+        public bool Send(&Socket client, int length)
+        {
+            this.SendStatusCode(client);
+
+            client.Send("Content-Type: " as ByteArray);
+            client.Send(this.ContentType as ByteArray);
+            client.Send("\r\nContent-Length: " as ByteArray);
+            String len = length.ToStringDec();
+            client.Send(len.Content as ByteArray);
+            client.Send("\r\n\r\n" as ByteArray);
+
+            return true;
+        }
+
+        public bool SetStatus(int status)
+        {
+            this.StatusCode = status;
+            return true;
+        }
 
         public this ~()
         {
@@ -387,7 +476,7 @@ namespace "System.Net"
         public string Path;
         public int Method;
 
-        public this new(string path, int method, Func<bool, Any> onrequest)
+        public this new(string path, int method, Func<HttpResponse, HttpRequestHeader> onrequest)
         {
             this.Onrequest = onrequest;
             this.Path = path;
@@ -400,17 +489,19 @@ namespace "System.Net"
 
         }
 
-        public bool Execute(HttpContext context)
+        public bool Execute(HttpRequestHeader request, HttpResponse response)
         {
-            if (context.Request.Method != this.Method) return false;
-            &String path = context.Request.Path;
+            if (request.Method != this.Method) return false;
+            &String path = request.Path;
             if (path is null) return false;
             if (this.Path != path.Content) return false;
 
-            Func<bool, Any> onrequest = this.Onrequest;
+            Func<HttpResponse, HttpRequestHeader> onrequest = this.Onrequest;
             if (onrequest is null) return false;
 
-            return onrequest(context);
+            response = onrequest(request);
+
+            return true;
         }
     }
 

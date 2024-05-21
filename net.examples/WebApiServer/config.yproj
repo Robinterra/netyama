@@ -11,6 +11,8 @@ AsmOut:"bin/out.S"
 
 Source:"src/"
 
+ReflectionActive:true
+
 package: {
     git.repository:"https://github.com/Robinterra/armlibrary.git"
     git.branch:"master"
@@ -19,4 +21,11 @@ package: {
 package: {
     name:"Sysetm.Net"
     local.path:"../../"
+}
+
+// Json Library
+package: {
+    git.repository:"https://github.com/Robinterra/jsonyama.git"
+    git.branch:"master"
+    git.autoupdate:false
 }

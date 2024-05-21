@@ -7,28 +7,51 @@ namespace "Program"
     using "System.Gpio";
     using "System.Runtime";
     using "System.Net";
+    using "System.Reflection";
     //using "System.Collections";
+
+    public class Response
+    {
+        public int Temperature;
+
+        public this new ()
+        {
+            this.Temperature = 0;
+
+            return this;
+        }
+
+        public this ~()
+        {
+
+        }
+    }
 
     public static class Program
     {
         static GpioPin lampenRelay;
 
-        static bool LampenAn(HttpContext context)
+        static HttpResponse LampenAn(HttpRequestHeader request)
         {
             Console.PrintLine("Lampen an");
             &GpioPin lampenRelay = Program.lampenRelay;
-            if (lampenRelay is null) return false;
+            if (lampenRelay is null) return HttpResponse.InternalServerError();
             lampenRelay.Write(PinValue.High);
-            return true;
+
+            Response response = new Response();
+            response.Temperature = 20;
+            TypeInfo type = typeof<Response>;
+
+            return HttpResponse.Ok(response as object, type);
         }
 
-        static bool LampenAus(HttpContext context)
+        static HttpResponse LampenAus(HttpRequestHeader request)
         {
             Console.PrintLine("Lampen aus");
             &GpioPin lampenRelay = Program.lampenRelay;
-            if (lampenRelay is null) return false;
+            if (lampenRelay is null) return HttpResponse.InternalServerError();
             lampenRelay.Write(PinValue.Low);
-            return true;
+            return HttpResponse.Ok();
         }
 
         static int main()
@@ -41,11 +64,11 @@ namespace "Program"
             Console.PrintLine("Hello World!");
 
             HttpServer server = new HttpServer();
-            server.Init("00.00.00.00", 1235);
+            server.Init("00.00.00.00", 1234);
 
-            Func<bool, Any> lampeAn = Program.LampenAn;
+            Func<HttpResponse, HttpRequestHeader> lampeAn = Program.LampenAn;
             server.AddRequestHandler("/on", HttpMethod.Post, lampeAn);
-            Func<bool, Any> lampeAus = Program.LampenAus;
+            Func<HttpResponse, HttpRequestHeader> lampeAus = Program.LampenAus;
             server.AddRequestHandler("/off", HttpMethod.Get, lampeAus);
 
             server.Run();

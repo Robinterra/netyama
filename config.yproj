@@ -1,1 +1,8 @@
 Source:"net.src/"
+
+// Json Library
+package: {
+    git.repository:"https://github.com/Robinterra/jsonyama.git"
+    git.branch:"master"
+    git.autoupdate:false
+}
