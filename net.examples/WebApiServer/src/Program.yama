@@ -1,0 +1,213 @@
+namespace "Program"
+{
+    using "System";
+    using "System.IO";
+    using "System.Time";
+    using "ARM.Pi";
+    using "System.Gpio";
+    using "System.Runtime";
+    using "System.Net";
+    //using "System.Collections";
+
+    public static class Program
+    {
+        static GpioPin lampenRelay;
+
+        static bool LampenAn(HttpContext context)
+        {
+            Console.PrintLine("Lampen an");
+            &GpioPin lampenRelay = Program.lampenRelay;
+            if (lampenRelay is null) return false;
+            lampenRelay.Write(PinValue.High);
+            return true;
+        }
+
+        static bool LampenAus(HttpContext context)
+        {
+            Console.PrintLine("Lampen aus");
+            &GpioPin lampenRelay = Program.lampenRelay;
+            if (lampenRelay is null) return false;
+            lampenRelay.Write(PinValue.Low);
+            return true;
+        }
+
+        static int main()
+        {
+            PiGpioService service = new PiGpioService(PiVariante.Pi3);
+            GpioController controller = new GpioController(service as IGpioService);
+
+            Program.lampenRelay = controller.OpenPin(3, PinMode.Write);
+
+            Console.PrintLine("Hello World!");
+
+            HttpServer server = new HttpServer();
+            server.Init("00.00.00.00", 1235);
+
+            Func<bool, Any> lampeAn = Program.LampenAn;
+            server.AddRequestHandler("/on", HttpMethod.Post, lampeAn);
+            Func<bool, Any> lampeAus = Program.LampenAus;
+            server.AddRequestHandler("/off", HttpMethod.Get, lampeAus);
+
+            server.Run();
+
+            return 0;
+        }
+
+
+        /*
+        static ByteArray daten;
+        static Socket client;
+        static GpioPin lampenRelay;
+        static int counter;
+
+        static bool SwitchLight()
+        {
+            &GpioPin lampenRelay = Program.lampenRelay;
+            if (lampenRelay is null) return false;
+
+            int counter = Program.counter;
+            Program.counter = counter + 1;
+            bool sucess = (counter % 2) == 0;
+            if (sucess)
+            {
+                Console.PrintLine("Lampen an");
+                lampenRelay.Write(PinValue.High);
+                return true;
+            }
+            Console.PrintLine("Lampen aus");
+            lampenRelay.Write(PinValue.Low);
+
+
+            return true;
+        }
+
+        static bool GetMethode(HttpRequestHeader request)
+        {
+            &String path = request.Path;
+            if (path is null) return false;
+            &GpioPin lampenRelay = Program.lampenRelay;
+            if (lampenRelay is null) return false;
+            Console.Print("Get: ");
+            Console.PrintLine(path.Content);
+
+            if (path.Content == "/on")
+            {
+                lampenRelay.Write(PinValue.High);
+            }
+            if (path.Content == "/off")
+            {
+                lampenRelay.Write(PinValue.Low);
+            }
+            
+            return true;
+        }
+
+        static bool PostMethode(HttpRequestHeader request)
+        {
+            &String path = request.Path;
+            if (path is null) return false;
+            Console.Print("Post: ");
+            Console.PrintLine(path.Content);
+            return true;
+        }
+
+        static bool ChooseFunction(HttpRequestHeader request, HttpResponse response)
+        {
+            int met = request.Method;
+            if (met == 2) return Program.PostMethode(request);
+            return Program.GetMethode(request);
+        }
+
+        static bool RunApi(RefString req, &Socket client)
+        {
+            HttpRequestHeader request = HttpRequestHeader.Parse(req);
+            let HttpResponse response;
+            let HttpResponseHeader header;
+            header.StatusCode = 0;
+            header.ContentType = "text/html";
+            response.Body = null as Stream;
+            response.Header = header;
+            int met = request.Method;
+
+            Program.ChooseFunction(request, response);
+
+            &Stream body = response.Body;
+            if (body is null)
+            {
+                ByteArray sendData = "HTTP/1.1 204 Not content\r\n\r\n" as ByteArray;
+
+                client.Send(sendData);
+                return true;
+            }
+
+            ByteArray defaultResp = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 11\r\n\r\nThere is Body" as ByteArray;
+
+            client.Send(defaultResp);
+
+            return true;
+        }
+
+        static bool RunningThread(&Socket client)
+        {
+            ByteArray buffer = ByteArray.New[400];
+            if (buffer is null) return false;
+            int result = client.Receive(buffer);
+            if (result <= 0) return false;
+
+            string message = buffer as string;
+            message.Length = result;
+
+            RefString request = RefString.Pack(message);
+            Program.RunApi(request, client);
+
+            buffer = ~buffer;
+
+            client.Close();
+            Program.client = ~client;
+
+            //Program.SwitchLight();
+            return true;
+        }
+        */
+
+        /*static int main()
+        {
+            Program.counter = 1;
+            PiGpioService service = new PiGpioService(PiVariante.Pi3);
+            GpioController controller = new GpioController(service as IGpioService);
+
+            Program.lampenRelay = controller.OpenPin(3, PinMode.Write);
+
+            Console.PrintLine("Hello World!");
+
+            Socket socket = new Socket();
+            ThreadPool threadpool = new ThreadPool();
+            bool sucess = socket.Init(SocketDomain.InterNetwork, SocketType.Stream_TCP);
+            if (!sucess) return 1;
+
+            sucess = socket.Bind("00.00.00.00", 1234);
+            if (!sucess) return 1;
+            socket.Listen(10);
+            ThreadPool threadPool = new ThreadPool();
+            Func<bool, Any> threadMethode = Program.RunningThread;
+
+            while (true)
+            {
+                Program.counter = Program.counter + 1;
+                Socket accepted = socket.Accept();
+                if (accepted is null) return 1;
+
+                Console.PrintLine("Client connected");
+
+                Any data = accepted as Any;
+                threadPool.StartNewThread(data, threadMethode);
+                Program.client = accepted;
+            }
+
+            return 0;
+        }*/
+
+
+    }
+
+}

@@ -2,28 +2,24 @@ namespace "System.Net"
 {
     using "System.IO";
     using "System.Runtime";
+    using "System.Runtime.IO";
+
+    #region Server
 
     public class HttpServer
     {
-        #region vars
 
         private Socket socket;
         private string host;
         private int port;
         private ThreadPool threadpool;
-        private Func<bool, Any> onrequest;
-
-        #endregion vars
-
-        #region get/set
-
-        #endregion get/set
-
-        #region ctor
+        private static List<RequestHandler> handlers;
+        static Socket client;
 
         public this new()
         {
             this.threadpool = new ThreadPool();
+            HttpServer.handlers = new List<RequestHandler>();
             return this;
         }
 
@@ -32,9 +28,17 @@ namespace "System.Net"
 
         }
 
-        #endregion ctor
+        public bool AddRequestHandler(string path, int method, Func<bool, Any> onrequest)
+        {
+            RequestHandler handler = new RequestHandler(path, method, onrequest);
 
-        #region methods
+            &List<RequestHandler> handlers = HttpServer.handlers;
+            if (handlers is null) return false;
+
+            handlers.Add(handler);
+
+            return true;
+        }
 
         public bool Init(string host, int port)
         {
@@ -42,11 +46,14 @@ namespace "System.Net"
             this.port = port;
 
             Socket socket = new Socket();
-            if (!socket.Init((int)SocketDomain.InterNetwork, (int)SocketType.Stream)) return false;
+            bool sucess = socket.Init(SocketDomain.InterNetwork, SocketType.Stream_TCP);
+            if (!sucess) return false;
 
-            if (!socket.Bind(host, port)) return false;
+            sucess = socket.Bind(host, port);
+            if (!sucess) return false;
 
-            if (!socket.Listen(10)) return false;
+            sucess = socket.Listen(10);
+            if (!sucess) return false;
 
             this.socket = socket;
 
@@ -55,68 +62,371 @@ namespace "System.Net"
 
         public bool Run()
         {
-            Socket server = this.socket;
+            &Socket server = this.socket;
             if (server is null) return false;
+
+            &ThreadPool threadpool = this.threadpool;
+            if (threadpool is null) continue;
+
+            Func<bool, Any> handle = HttpServer.HandleRequest;
 
             while (true)
             {
                 Socket client = server.Accept();
-                if (client is null) continue;
+                if (client is null) return false;
+                if (threadpool is null) return false;
 
-                ThreadPool threadpool = this.threadpool;
-                if (threadpool is null) continue;
-
-                Func<int, Any> handle = this.HandleRequest;
-                threadpool.StartNewThread(client, handle);
+                Any data = client as Any;
+                threadpool.StartNewThread(data, handle);
+                HttpServer.client = client;
             }
 
             return true;
         }
 
-        public bool HandleRequest(Socket client)
+        public static bool HandleRequest(Socket client)
         {
-            if (this.onrequest == null) return false;
+            ByteArray buffer = ByteArray.New[400];
+            if (buffer is null) return false;
+            int result = client.Receive(buffer);
+            if (result <= 0)
+            {
+                ByteArray tmp = ~buffer;
+                return false;
+            }
 
-            Func<bool, Any> onrequest = this.onrequest;
+            string message = buffer as string;
+            message.Length = result;
 
-            onrequest(client);
+            RefString req = RefString.Pack(message);
+            HttpRequestHeader request = HttpRequestHeader.Parse(req);
+
+            HttpServer.HandleHttpRequest(client, request);
+
+            buffer = ~buffer;
+
+            client.Close();
 
             return true;
         }
 
-        #endregion methods
+        public static bool FindAndExecuteHandler(HttpContext context)
+        {
+            &List<RequestHandler> handlers = HttpServer.handlers;
+            if (handlers is null) return false;
+
+            int length = handlers.Length;
+            for (int i = 0; i < length; i = i + 1)
+            {
+                &RequestHandler handler = handlers.Get(i);
+                if (handler is null) continue;
+
+                bool sucess = handler.Execute(context);
+                if (sucess) return true;
+            }
+
+            return false;
+        }
+
+        public static bool HandleHttpRequest(&Socket client, HttpRequestHeader request)
+        {
+            let HttpResponse response;
+            let HttpResponseHeader header;
+            header.StatusCode = 0;
+            header.ContentType = "text/html";
+            response.Body = null as Stream;
+            response.Header = header;
+
+            let HttpContext context;
+            context.Request = request;
+            context.Response = response;
+
+            &List<RequestHandler> handlers = HttpServer.handlers;
+            if (handlers is null) return false;
+
+            Console.PrintLine("Suche Handler");
+
+            bool found = HttpServer.FindAndExecuteHandler(context);
+            if (!found)
+            {
+                ByteArray sendData = "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\nContent-Length: 9\r\n\r\nNot Found" as ByteArray;
+                client.Send(sendData);
+                return true;
+            }
+
+            HttpServer.HandleResponse(client, response);
+
+            return true;
+        }
+
+        public static bool HandleResponse(&Socket client, HttpResponse response)
+        {
+            &Stream body = response.Body;
+            if (body is null)
+            {
+                ByteArray sendData = "HTTP/1.1 204 Not content\r\n\r\n" as ByteArray;
+
+                client.Send(sendData);
+                return true;
+            }
+
+            ByteArray defaultResp = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: 11\r\n\r\nThere is Body" as ByteArray;
+
+            client.Send(defaultResp);
+            return true;
+        }
+
     }
+
+    #endregion Server
+
+    #region Headers
 
     public struct HttpContext
     {
+        public HttpRequestHeader Request;
+        public HttpResponse Response;
+
         public this ~()
         {
 
         }
     }
 
-    public struct HttpRequest
+    /*public struct HttpRequest
     {
+        public HttpRequestHeader Header;
+
+        public Stream Body;
+
         public this ~()
         {
 
         }
     }
-
+*/
     public struct HttpResponse
     {
+        public HttpResponseHeader Header;
+
+        public Stream Body;
+
         public this ~()
         {
 
         }
     }
 
-    public struct HttpHeader
+    public struct HttpResponseHeader
     {
+        public int StatusCode;
+        public string ContentType;
+
         public this ~()
         {
 
         }
+    }
+
+    public struct HttpRequestHeader
+    {
+        public int Method;
+
+        public String Path;
+
+        public static HttpRequestHeader Parse(RefString source)
+        {
+            HttpHeaderTokenizer tokenizer = HttpHeaderTokenizer.Init(source);
+            Result.Path = null as String;
+
+            while (tokenizer.NextToken())
+            {
+                int tokenKind = tokenizer.TokenKind;
+                if (tokenKind == HttpHeaderTokenKind.Get)
+                {
+                    Result.Method = HttpMethod.Get;
+                    tokenizer.NextToken();
+                    int start = tokenizer.Index;
+                    int length = tokenizer.TokenLength;
+
+                    ByteArray data = ByteArray.New[16];
+                    ByteArray.Copy(data, source.Source as ByteArray, 0, start, length);
+                    string conq = data as string;
+                    conq.Length = length;
+                    Result.Path = new String(conq);
+
+                    return Result;
+                }
+                if (tokenKind == HttpHeaderTokenKind.Post)
+                {
+                    Result.Method = HttpMethod.Post;
+                    tokenizer.NextToken();
+                    int start = tokenizer.Index;
+                    int length = tokenizer.TokenLength;
+
+                    ByteArray data = ByteArray.New[16];
+                    ByteArray.Copy(data, source.Source as ByteArray, 0, start, length);
+                    string conq = data as string;
+                    conq.Length = length;
+                    Result.Path = new String(conq);
+
+                    return Result;
+                }
+            }
+
+            return Result;
+        }
+
+        public this ~()
+        {
+
+        }
+    }
+
+    public struct HttpHeaderTokenizer
+    {
+
+        public string Source;
+        public int Index;
+        public int Length;
+        public int TokenLength;
+        public int TokenKind;
+        public int TokenNumber;
+
+        public this ~()
+        {
+
+        }
+
+        public static HttpHeaderTokenizer Init(RefString source)
+        {
+            Result.Source = source.Source;
+            Result.Index = source.Start;
+            Result.Length = source.Length;
+            Result.TokenLength = 0;
+            Result.TokenKind = HttpHeaderTokenKind.None;
+        }
+
+        public bool NextToken()
+        {
+            int start = this.Index + this.TokenLength;
+            if (start >= this.Length) return false;
+
+            int length = this.Length - this.TokenLength;
+            RefString iterator = RefString.Pack(this.Source);
+            iterator.Start = start;
+            iterator.Length = length;
+
+            this.TokenNumber = this.TokenNumber + 1;
+            for (int i = 0; i < length; i = i + 1)
+            {
+                char content = (iterator.Data[i]) as char;
+                if (content.IsWhitespace()) continue;
+
+                bool sucess = this.FindWordToken(start + i, HttpHeaderTokenKind.Get, "GET", iterator);
+                if (sucess) return true;
+
+                sucess = this.FindWordToken(start + i, HttpHeaderTokenKind.Post, "POST", iterator);
+                if (sucess) return true;
+
+                sucess = this.DefaultToken(start + i, HttpHeaderTokenKind.Path, iterator);
+                return sucess;
+            }
+
+            return false;
+        }
+
+        private bool DefaultToken(int start, int tokenKind, RefString iterator)
+        {
+            this.Index = start;
+            iterator.Start = this.Index;
+            this.TokenKind = tokenKind;
+            this.TokenLength = 0;
+
+            int length = iterator.Length;
+            for (int i = 0; i < length; i = i + 1)
+            {
+                char content = (iterator.Data[i]) as char;
+                if (content.IsWhitespace()) return true;
+                this.TokenLength = this.TokenLength + 1;
+            }
+
+            return true;
+        }
+
+        private bool FindWordToken(int start, int tokenKind, string word, RefString iterator)
+        {
+            this.Index = start;
+            iterator.Start = this.Index;
+            this.TokenLength = 0;
+
+            int length = word.Length;
+            for (int i = 0; i < length; i = i + 1)
+            {
+                int currentChar = iterator.Data[i];
+                int expectetChar = word.Data[i];
+
+                if (currentChar != expectetChar) return false;
+                this.TokenLength = this.TokenLength + 1;
+            }
+
+            this.TokenKind = tokenKind;
+
+            return true;
+        }
+    }
+
+    #endregion Headers
+
+    #region Requests
+
+    public class RequestHandler
+    {
+
+        public Func<bool, Any> Onrequest;
+        public string Path;
+        public int Method;
+
+        public this new(string path, int method, Func<bool, Any> onrequest)
+        {
+            this.Onrequest = onrequest;
+            this.Path = path;
+            this.Method = method;
+            return this;
+        }
+
+        public this ~()
+        {
+
+        }
+
+        public bool Execute(HttpContext context)
+        {
+            if (context.Request.Method != this.Method) return false;
+            &String path = context.Request.Path;
+            if (path is null) return false;
+            if (this.Path != path.Content) return false;
+
+            Func<bool, Any> onrequest = this.Onrequest;
+            if (onrequest is null) return false;
+
+            return onrequest(context);
+        }
+    }
+
+    #endregion Requests
+
+    public enum HttpHeaderTokenKind
+    {
+        None = 0,
+        Method = 1,
+        Path = 2,
+        Version = 3,
+        Header = 4,
+        Body = 5,
+        Post = 6,
+        Get = 7,
+        Delete = 8,
     }
 
     public enum HttpMethod
