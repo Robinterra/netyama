@@ -10,6 +10,25 @@ namespace "Program"
     using "System.Reflection";
     //using "System.Collections";
 
+    public class TesterMainClass
+    {
+        public String Hallo;
+        public bool Switch;
+
+        public this new()
+        {
+            this.Hallo = null as String;
+            this.Switch = false;
+
+            return this;
+        }
+
+        public this ~()
+        {
+
+        }
+    }
+
     public class Response
     {
         public int Temperature;
@@ -30,6 +49,31 @@ namespace "Program"
     public static class Program
     {
         static GpioPin lampenRelay;
+
+        static HttpResponse DeserialisePost(&TesterMainClass jup)
+        {
+            &String input = jup.Hallo;
+            if (input is null) return HttpResponse.InternalServerError();
+
+            &GpioPin lampenRelay = Program.lampenRelay;
+            if (lampenRelay is null) return HttpResponse.InternalServerError();
+            if (jup.Switch)
+            {
+                lampenRelay.Write(PinValue.High);
+            }
+            else
+            {
+                lampenRelay.Write(PinValue.Low);
+            }
+
+            Console.PrintLine(input.Content);
+
+            Response response = new Response();
+            response.Temperature = 20;
+            TypeInfo type = typeof<Response>;
+
+            return HttpResponse.Ok(response as object, type);
+        }
 
         static HttpResponse LampenAn(HttpRequest request)
         {
@@ -70,6 +114,10 @@ namespace "Program"
             server.MapGet("/on", lampeAn);
             Func<HttpResponse, HttpRequestHeader> lampeAus = Program.LampenAus;
             server.MapGet("/off", lampeAus);
+
+            Func<HttpResponse, HttpRequestHeader> deserialPost = Program.DeserialisePost;
+            TypeInfo type = typeof<TesterMainClass>;
+            server.MapPost("/juhu", deserialPost, type);
 
             server.Run();
 

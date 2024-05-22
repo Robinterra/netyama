@@ -566,7 +566,27 @@ namespace "System.Net"
             Func<HttpResponse, HttpRequestHeader> onrequest = this.Onrequest;
             if (onrequest is null) return false;
 
+            TypeInfo type = this.Type;
+            if (type isnot null) return this.ExecuteDeserialized(request, response, onrequest, type);
+
             response = onrequest(request);
+
+            return true;
+        }
+
+        public bool ExecuteDeserialized(HttpRequest request, HttpResponse response, Func<HttpResponse, Any> onrequest, TypeInfo type)
+        {
+            &MemoryStream stream = request.Body as MemoryStream;
+            if (stream is null) return false;
+
+            RefString streamContent = stream.ToRefString();
+            JsonDeserilaizeResponse jsonresp = JsonSerializer.DeSerialize(streamContent, type);
+            if (!jsonresp.IsSuccess) return false;
+
+            Any data = jsonresp.Result;
+            if (data is null) return false;
+
+            response = onrequest(data);
 
             return true;
         }
