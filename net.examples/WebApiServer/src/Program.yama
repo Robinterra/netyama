@@ -31,7 +31,7 @@ namespace "Program"
     {
         static GpioPin lampenRelay;
 
-        static HttpResponse LampenAn(HttpRequestHeader request)
+        static HttpResponse LampenAn(HttpRequest request)
         {
             Console.PrintLine("Lampen an");
             &GpioPin lampenRelay = Program.lampenRelay;
@@ -45,7 +45,7 @@ namespace "Program"
             return HttpResponse.Ok(response as object, type);
         }
 
-        static HttpResponse LampenAus(HttpRequestHeader request)
+        static HttpResponse LampenAus(HttpRequest request)
         {
             Console.PrintLine("Lampen aus");
             &GpioPin lampenRelay = Program.lampenRelay;
@@ -64,12 +64,12 @@ namespace "Program"
             Console.PrintLine("Hello World!");
 
             HttpServer server = new HttpServer();
-            server.Init("00.00.00.00", 1234);
+            server.Init("00.00.00.00", 1235);
 
             Func<HttpResponse, HttpRequestHeader> lampeAn = Program.LampenAn;
-            server.AddRequestHandler("/on", HttpMethod.Post, lampeAn);
+            server.MapGet("/on", lampeAn);
             Func<HttpResponse, HttpRequestHeader> lampeAus = Program.LampenAus;
-            server.AddRequestHandler("/off", HttpMethod.Get, lampeAus);
+            server.MapGet("/off", lampeAus);
 
             server.Run();
 
